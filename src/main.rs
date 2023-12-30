@@ -14,7 +14,7 @@ use nom::{
     error::{convert_error, ErrorKind, VerboseError},
     multi::{many0, many1},
     sequence::delimited,
-    IResult, Parser,
+    IResult, Parser, Slice,
 };
 use nom_supreme::{
     error::ErrorTree,
@@ -141,6 +141,16 @@ impl Env {
         new_version.0.insert(key, val);
         new_version
     }
+
+    fn with_vars(self, vars: Vec<(&str, &str)>) -> Self {
+        let mut new_version = self;
+        for (key, val) in vars {
+            new_version
+                .0
+                .insert(VName(key.to_string()), EVal::Text(val.to_string()));
+        }
+        new_version
+    }
 }
 
 fn parse_args1(i: &str) -> PResult<&str, Vec<Expr>> {
@@ -218,6 +228,7 @@ fn parse_expr(i: &str) -> PResult<&str, Expr> {
 
 fn parse_eval(i: &str) -> PResult<&str, Expr> {
     let (i, _) = tag("eval").parse(i)?;
+    let (i, _) = multispace0(i)?;
     let (i, _) = char('(').parse(i)?;
     let (i, args) = parse_args1.context("Args in eval").parse(i)?;
     if args.len() != 1 {
@@ -374,6 +385,7 @@ fn parse_and_eval(i: &str, env: Env) -> Result<(EVal, Env)> {
 }
 
 fn deobfuscate(i: &str) -> Result<String> {
+    let predefined_vars = vec![("PUMQXWZUDD", include_str!("PUMQXWZUDD.var"))];
     let env = Env::new()
         .with(
             VName("KAWSZFKWV".to_string()),
@@ -382,7 +394,8 @@ fn deobfuscate(i: &str) -> Result<String> {
         .with(
             VName("MXTVB".to_string()),
             EVal::Text("base64_decode".to_string()),
-        );
+        )
+        .with_vars(predefined_vars);
     let mut count = 1;
     let (mut eval_call_arg, mut env) =
         parse_and_eval(i, env).context(format!("At {} call to parse and eval", count))?;
@@ -432,10 +445,53 @@ fn deob(payload: &str) -> Result<String> {
     gzuncompress(&bytes)
 }
 
+const FUNCS: [&str; 31] = [
+    "7068705F756E616D65",
+    "73657373696F6E5F7374617274",
+    "6572726F725F7265706F7274696E67",
+    "70687076657273696F6E",
+    "66696C655F7075745F636F6E74656E7473",
+    "66696C655F6765745F636F6E74656E7473",
+    "66696C657065726D73",
+    "66696C656D74696D65",
+    "66696C6574797065",
+    "68746D6C7370656369616C6368617273",
+    "737072696E7466",
+    "737562737472",
+    "676574637764",
+    "6368646972",
+    "7374725F7265706C616365",
+    "6578706C6F6465",
+    "666C617368",
+    "6D6F76655F75706C6F616465645F66696C65",
+    "7363616E646972",
+    "676574686F737462796E616D65",
+    "7368656C6C5F65786563",
+    "74727565",
+    "6469726E616D65",
+    "64617465",
+    "6D696D655F636F6E74656E745F74797065",
+    "66756E6374696F6E5F657869737473",
+    "6673697A65",
+    "726D646972",
+    "756E6C696E6B",
+    "6D6B646972",
+    "72656E616D65",
+];
+
 fn main() {
-    let input = include_str!("main.in");
-    let result = deobfuscate(input);
-    println!("RESULT: {:#?}", result);
+    for (idx, func_encoded) in FUNCS.into_iter().enumerate() {
+        let mut func_decoded = String::new();
+        for (i, _) in func_encoded.char_indices().step_by(2) {
+            let ch = &func_encoded[i..i + 2];
+            let decoded_ch: char = u32::from_str_radix(ch, 16).unwrap().try_into().unwrap();
+            func_decoded += &decoded_ch.to_string();
+        }
+        println!("Function {}: {}", idx, func_decoded);
+    }
+    // let input = include_str!("main.in");
+    // let result = deobfuscate(input).unwrap();
+    // println!("RESULT: {:#?}", result);
 }
 
 #[cfg(test)]
